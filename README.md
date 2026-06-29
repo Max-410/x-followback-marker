@@ -18,17 +18,59 @@
 
 ## 安装
 
-1. 安装浏览器扩展 [Tampermonkey](https://www.tampermonkey.net/)。
-2. 新建用户脚本。
-3. 复制 `x-followback-marker.user.js` 的全部内容。
-4. 保存脚本。
-5. 打开 X/Twitter 的关注列表页面，例如：
+推荐安装地址：
+
+```text
+https://raw.githubusercontent.com/Max-410/x-followback-marker/main/x-followback-marker.user.js
+```
+
+### 自动安装
+
+1. 先安装浏览器扩展 [Tampermonkey](https://www.tampermonkey.net/)。
+2. 打开 Raw 脚本地址：
+
+   ```text
+   https://raw.githubusercontent.com/Max-410/x-followback-marker/main/x-followback-marker.user.js
+   ```
+
+3. 如果 Tampermonkey 弹出安装页，点击 `安装` / `更新`。
+4. 打开 X/Twitter 的关注列表页面，例如：
 
    ```text
    https://x.com/your_username/following
    ```
 
-6. 页面右下角出现 `互关标记` 面板后即可使用。
+5. 页面右下角出现 `互关标记` 面板后即可使用。
+
+### 手动安装
+
+如果打开 Raw 地址后只是显示代码：
+
+1. 打开 Tampermonkey 管理面板。
+2. 新建用户脚本。
+3. 删除默认模板代码。
+4. 复制 `x-followback-marker.user.js` 的全部内容并粘贴。
+5. `Ctrl + S` 保存。
+6. 刷新 X/Twitter 页面。
+
+## 更新/覆盖旧版本
+
+如果你已经安装过旧版本：
+
+1. 打开 Tampermonkey 管理面板。
+2. 找到 `X Followback Marker - 手动互关清理标记`。
+3. 点进去编辑。
+4. `Ctrl + A` 全选旧代码并删除。
+5. 打开 Raw 脚本地址，复制全部代码。
+6. 粘贴到 Tampermonkey 编辑器。
+7. `Ctrl + S` 保存。
+8. 刷新 X/Twitter 页面。
+
+当前版本号会显示在右下角面板标题里，例如：
+
+```text
+互关标记 v0.4.0
+```
 
 ## 支持页面
 
@@ -45,11 +87,23 @@
 https://x.com/<username>/following
 ```
 
+## 判断逻辑
+
+不同页面的判断逻辑不一样：
+
+| 页面 | 绿色 `已回关` | 红色状态 |
+|---|---|---|
+| `/following` 正在关注 | 对方资料卡里出现 `关注了你` / `Follows you` | `未回关`：你关注了对方，但对方没关注你 |
+| `/followers` 关注者 | 按钮显示 `正在关注` / `Following` | `待回关`：对方关注你，但你还没关注对方 |
+| `/verified_followers` 认证关注者 | 按钮显示 `正在关注` / `Following` | `待回关`：蓝 V 关注你，但你还没关注对方 |
+| `/followers_you_follow` 你关注的关注者 | 通常都是互关，用按钮状态辅助判断 | 非互关会标红 |
+
 ## 使用建议
 
 - 慢慢往下滚动，X 会动态加载更多用户卡片，脚本会自动标记新加载的卡片。
 - 如果发现漏标，点击右下角面板里的 `重新扫描`。
 - 建议只用它辅助人工判断，不要配合批量取关脚本。
+- 如果从一个 Tab 切到另一个 Tab 后显示不准，先点 `重新扫描`。
 
 ## 安全边界
 
@@ -73,9 +127,9 @@ https://x.com/<username>/following
 ## 文件
 
 - `x-followback-marker.user.js`：Tampermonkey 脚本本体
-- `x-followback-marker-README.md`：项目说明
-- `x-followback-marker-LICENSE.txt`：MIT License
-- `x-followback-marker-CHANGELOG.md`：更新记录
+- `README.md`：项目说明
+- `CHANGELOG.md`：更新记录
+- `LICENSE`：MIT License
 
 ## License
 
