@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         X Followback Marker - 手动互关清理标记
 // @namespace    https://codex.local/meme-tools
-// @version      0.3.0
+// @version      0.4.0
 // @description  在 X/Twitter 的关注列表中标记“已回关/未回关”。只做颜色标记，不自动关注/取关。
 // @author       Codex
 // @match        https://x.com/*
@@ -14,7 +14,7 @@
   'use strict';
 
   const STORAGE_KEY = 'codex_x_followback_marker_enabled';
-  const SCRIPT_VERSION = 'v0.3.0';
+  const SCRIPT_VERSION = 'v0.4.0';
   const DEFAULT_ENABLED = true;
 
   const TEXT = {
@@ -56,6 +56,15 @@
     );
   }
 
+  function getPageMode() {
+    const path = location.pathname;
+    if (/\/following\/?$/.test(path)) return 'following';
+    if (/\/followers\/?$/.test(path)) return 'followers';
+    if (/\/verified_followers\/?$/.test(path)) return 'followers';
+    if (/\/followers_you_follow\/?$/.test(path)) return 'followers_you_follow';
+    return 'unknown';
+  }
+
   function includesAny(text, needles) {
     return needles.some((needle) => text.includes(needle));
   }
@@ -63,6 +72,39 @@
   function hasFollowBackBadge(cell) {
     const text = normalizeText(cell.innerText || '');
     return includesAny(text, TEXT.followBackZh) || includesAny(text, TEXT.followBackEn);
+  }
+
+  function youAreFollowing(cell) {
+    const text = normalizeText(cell.innerText || '');
+
+    // 中文页面：你已关注对方时，按钮通常是“正在关注”。
+    // 英文页面：按钮通常是 “Following”。
+    // 注意：在“关注者/认证关注者”页面里，“关注了你 / Follows you”只代表对方关注你，
+    // 不能当成互关。这里故意不看 followBack 文案。
+    if (/(^|\s)正在关注($|\s)/.test(text)) return true;
+    if (/(^|\s)Following($|\s)/.test(text)) return true;
+
+    // “回关 / Follow back / 关注 / Follow”表示你还没关注对方。
+    if (/(^|\s)回关($|\s)/.test(text)) return false;
+    if (/(^|\s)Follow back($|\s)/i.test(text)) return false;
+    if (/(^|\s)关注($|\s)/.test(text)) return false;
+    if (/(^|\s)Follow($|\s)/i.test(text)) return false;
+
+    return false;
+  }
+
+  function getRelationshipStatus(cell) {
+    const mode = getPageMode();
+
+    if (mode === 'following') {
+      return hasFollowBackBadge(cell) ? 'mutual' : 'non_mutual';
+    }
+
+    if (mode === 'followers' || mode === 'followers_you_follow') {
+      return youAreFollowing(cell) ? 'mutual' : 'not_following_back';
+    }
+
+    return hasFollowBackBadge(cell) ? 'mutual' : 'non_mutual';
   }
 
   function normalizeText(text) {
@@ -145,10 +187,12 @@
     if (old) old.remove();
   }
 
-  function makeBadge({ mutual, verified, handle }) {
+  function makeBadge({ status, verified, handle }) {
+    const mutual = status === 'mutual';
+    const label = status === 'not_following_back' ? '❌ 待回关' : (mutual ? '✅ 已回关' : '❌ 未回关');
     const badge = document.createElement('div');
     badge.className = 'codex-followback-badge';
-    badge.textContent = `${mutual ? '✅ 已回关' : '❌ 未回关'}${verified ? ' · 蓝V' : ''}${handle ? ` · ${handle}` : ''}`;
+    badge.textContent = `${label}${verified ? ' · 蓝V' : ''}${handle ? ` · ${handle}` : ''}`;
     badge.style.cssText = [
       'position:absolute',
       'right:72px',
@@ -175,12 +219,13 @@
   function markCell(cell) {
     if (!cell || cell.dataset.codexFollowbackMarked === '1') return;
 
-    const mutual = hasFollowBackBadge(cell);
+    const status = getRelationshipStatus(cell);
+    const mutual = status === 'mutual';
     const verified = hasVerifiedIcon(cell);
     const handle = getUserHandle(cell);
 
     cell.dataset.codexFollowbackMarked = '1';
-    cell.dataset.codexFollowbackStatus = mutual ? 'mutual' : 'non_mutual';
+    cell.dataset.codexFollowbackStatus = status;
     cell.dataset.codexFollowbackVerified = verified ? '1' : '0';
 
     cell.style.position = 'relative';
@@ -189,7 +234,7 @@
     cell.style.boxShadow = verified && !mutual ? `inset 0 0 0 2px ${COLORS.blue}` : '';
 
     removeOldBadge(cell);
-    cell.appendChild(makeBadge({ mutual, verified, handle }));
+    cell.appendChild(makeBadge({ status, verified, handle }));
   }
 
   function clearMarks() {
@@ -222,12 +267,14 @@
 
       const mutual = cells.filter((cell) => cell.dataset.codexFollowbackStatus === 'mutual').length;
       const nonMutual = cells.filter((cell) => cell.dataset.codexFollowbackStatus === 'non_mutual').length;
+      const notFollowingBack = cells.filter((cell) => cell.dataset.codexFollowbackStatus === 'not_following_back').length;
       const blueNonMutual = cells.filter(
         (cell) =>
-          cell.dataset.codexFollowbackStatus === 'non_mutual' &&
+          (cell.dataset.codexFollowbackStatus === 'non_mutual' ||
+            cell.dataset.codexFollowbackStatus === 'not_following_back') &&
           cell.dataset.codexFollowbackVerified === '1'
       ).length;
-      updatePanelCounts(mutual, nonMutual, blueNonMutual, cells.length);
+      updatePanelCounts(mutual, nonMutual, blueNonMutual, cells.length, notFollowingBack);
     } catch (error) {
       updatePanelError(error);
       console.error('[X Followback Marker] scan failed:', error);
@@ -305,7 +352,7 @@
     toggle.style.color = isEnabled() ? '#166534' : '#991b1b';
   }
 
-  function updatePanelCounts(mutual, nonMutual, blueNonMutual, total = 0) {
+  function updatePanelCounts(mutual, nonMutual, blueNonMutual, total = 0, notFollowingBack = 0) {
     const panel = document.getElementById('codex-followback-panel');
     if (!panel) return;
     const counts = panel.querySelector('.codex-counts');
@@ -321,6 +368,7 @@
       `扫描卡片：${total}`,
       `✅ 已回关：${mutual}`,
       `❌ 未回关：${nonMutual}`,
+      `↩️ 待回关：${notFollowingBack}`,
       `🔵 蓝V未回关：${blueNonMutual}`,
     ].join('<br>');
   }
